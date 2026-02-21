@@ -7,6 +7,7 @@ export default () => {
   return defineConfig({
     root: "./src",
     base: "",
+    cacheDir: "../node_modules/.vite",
     plugins: [tsconfigPaths(), react()],
   });
 };

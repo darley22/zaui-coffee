@@ -9,6 +9,7 @@ import { calculateDistance } from "utils/location";
 import { Store } from "types/delivery";
 import { calcFinalPrice } from "utils/product";
 import { wait } from "utils/async";
+import { getCategories, getProducts, getProductVariations } from "./services/woocommerce";
 import categories from "../mock/categories.json";
 
 export const userState = selector({
@@ -21,24 +22,103 @@ export const userState = selector({
 
 export const categoriesState = selector<Category[]>({
   key: "categories",
-  get: () => categories,
+  get: async () => {
+    const wcCategories = await getCategories();
+    if (wcCategories && wcCategories.length > 0) {
+      return wcCategories
+        .filter((c: any) => c.slug !== 'uncategorized' && c.count > 0)
+        .map((c: any) => {
+          let iconSrc = c.image?.src || "https://zjs.zmdx.vn/zmp/mobile/zaui-coffee/categories/coffee.svg";
+          // Sanitize external test URLs that shouldn't belong here
+          if (iconSrc.includes("lamhoacantho.com")) {
+            iconSrc = "https://zjs.zmdx.vn/zmp/mobile/zaui-coffee/categories/coffee.svg";
+          }
+          return {
+            id: String(c.id),
+            name: c.name,
+            icon: iconSrc,
+          };
+        });
+    }
+    // Fallback to mock data
+    return categories as Category[];
+  },
 });
 
 export const productsState = selector<Product[]>({
   key: "products",
   get: async () => {
+    const wcProducts = await getProducts();
+    if (wcProducts && wcProducts.length > 0) {
+      const parsedProducts = await Promise.all(wcProducts.map(async (p: any) => {
+        let mappedVariants: Variant[] = [];
+        let price = Number(p.price || p.regular_price || 0);
+
+        if (p.type === "variable") {
+          const variations = await getProductVariations(p.id);
+          if (variations && variations.length > 0) {
+            // Map WooCommerce attributes to Zalo MultipleOptionVariant
+            const basePrice = Number(variations[0].regular_price || variations[0].price || 0);
+            price = basePrice;
+
+            const optionsMapping: Record<string, any[]> = {};
+
+            variations.forEach((v: any) => {
+              v.attributes.forEach((attr: any) => {
+                if (!optionsMapping[attr.name]) optionsMapping[attr.name] = [];
+
+                const vPrice = Number(v.price || v.regular_price || 0);
+                const priceDiff = vPrice - basePrice;
+
+                const existingOption = optionsMapping[attr.name].find(o => o.id === attr.option);
+                if (!existingOption) {
+                  optionsMapping[attr.name].push({
+                    id: attr.option,
+                    label: attr.option,
+                    priceChange: priceDiff !== 0 ? { type: "fixed", amount: priceDiff } : undefined,
+                  });
+                }
+              });
+            });
+
+            mappedVariants = Object.keys(optionsMapping).map(attrName => ({
+              id: attrName,
+              label: attrName,
+              type: "single", // Generally variations are single-choice per attribute
+              options: optionsMapping[attrName]
+            })) as Variant[];
+          }
+        }
+
+        return {
+          id: p.id,
+          name: p.name,
+          price: price,
+          image: p.images?.[0]?.src || "https://zjs.zmdx.vn/zmp/mobile/zaui-coffee/products/placeholder.svg",
+          description: p.short_description || p.description || "",
+          categoryId: p.categories?.filter((c: any) => c.slug !== 'uncategorized').map((c: any) => String(c.id)) || [],
+          variants: mappedVariants.length > 0 ? mappedVariants : undefined,
+          sale: p.on_sale && p.regular_price && p.sale_price ? {
+            type: "percent",
+            percent: Math.round(((p.regular_price - p.sale_price) / p.regular_price) * 100)
+          } : undefined,
+        } as unknown as Product;
+      }));
+      return parsedProducts;
+    }
+    // Fallback to mock data
     await wait(2000);
     const products = (await import("../mock/products.json")).default;
     const variants = (await import("../mock/variants.json"))
       .default as Variant[];
     return products.map(
       (product) =>
-        ({
-          ...product,
-          variants: variants.filter((variant) =>
-            product.variantId.includes(variant.id)
-          ),
-        } as Product)
+      ({
+        ...product,
+        variants: variants.filter((variant) =>
+          product.variantId.includes(variant.id)
+        ),
+      } as Product)
     );
   },
 });
@@ -60,12 +140,12 @@ export const productsByCategoryState = selectorFamily<Product[], string>({
   key: "productsByCategory",
   get:
     (categoryId) =>
-    ({ get }) => {
-      const allProducts = get(productsState);
-      return allProducts.filter((product) =>
-        product.categoryId.includes(categoryId)
-      );
-    },
+      ({ get }) => {
+        const allProducts = get(productsState);
+        return allProducts.filter((product) =>
+          product.categoryId.includes(categoryId)
+        );
+      },
 });
 
 export const cartState = atom<Cart>({

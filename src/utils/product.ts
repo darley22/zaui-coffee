@@ -1,4 +1,6 @@
-import { createOrder } from "zmp-sdk";
+import { createOrder, openWebview } from "zmp-sdk";
+import { createOrder as createWcOrder } from "../services/woocommerce";
+import { Cart } from "types/cart";
 import { Option, Product } from "types/product";
 import { getConfig } from "./config";
 import { SelectedOptions } from "types/cart";
@@ -69,7 +71,7 @@ export function isIdentical(
       Array.isArray(option1Value) &&
       Array.isArray(option2Value) &&
       [...option1Value].sort().toString() ===
-        [...option2Value].sort().toString();
+      [...option2Value].sort().toString();
 
     if (option1Value !== option2Value && !areEqual) {
       return false;
@@ -79,19 +81,42 @@ export function isIdentical(
   return true;
 }
 
-const pay = (amount: number, description?: string) =>
-  createOrder({
-    desc:
-      description ??
-      `Thanh toán cho ${getConfig((config) => config.app.title)}`,
-    item: [],
-    amount: amount,
-    success: (data) => {
-      console.log("Payment success: ", data);
-    },
-    fail: (err) => {
-      console.log("Payment error: ", err);
-    },
-  });
+export const pay = async (amount: number, cart: Cart) => {
+  try {
+    const orderData = {
+      // Allow momo default plugin selection
+      payment_method: "momo",
+      payment_method_title: "Momo",
+      set_paid: false,
+      line_items: cart.map(item => ({
+        product_id: Number(item.product.id),
+        quantity: item.quantity,
+      })),
+    };
+
+    const order = await createWcOrder(orderData);
+    const paymentUrl = order?.payment_url || order?.checkout_payment_url;
+
+    if (paymentUrl) {
+      openWebview({
+        url: paymentUrl,
+        config: {
+          style: "bottomSheet",
+          leftButton: "back"
+        },
+        success: () => {
+          console.log("Opened Webview for Momo payment.");
+        },
+        fail: (error) => {
+          console.error("Failed to open webview", error);
+        }
+      });
+    } else {
+      console.error("Order created but no payment URL found:", order);
+    }
+  } catch (error) {
+    console.error("Payment error:", error);
+  }
+};
 
 export default pay;
