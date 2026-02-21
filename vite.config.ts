@@ -6,6 +6,7 @@ import react from "@vitejs/plugin-react";
 export default () => {
   return defineConfig({
     root: "./src",
+    envDir: "../", // Load .env from project root instead of src
     base: "",
     cacheDir: "../node_modules/.vite",
     plugins: [tsconfigPaths(), react()],

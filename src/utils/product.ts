@@ -5,6 +5,24 @@ import { Option, Product } from "types/product";
 import { getConfig } from "./config";
 import { SelectedOptions } from "types/cart";
 
+export function parsePrice(price: any): number {
+  if (typeof price === "number") return price;
+  if (!price) return 0;
+  let priceStr = String(price).trim();
+
+  // If price has WooCommerce default decimal zeros, strip them explicitly at the end
+  if (priceStr.endsWith(".00")) {
+    priceStr = priceStr.slice(0, -3);
+  } else if (priceStr.endsWith(",00")) {
+    priceStr = priceStr.slice(0, -3);
+  }
+
+  // Remove all commas and dots (Vietnamese thousand separators format)
+  priceStr = priceStr.replace(/[.,]/g, "");
+
+  return Number(priceStr) || 0;
+}
+
 export function calcFinalPrice(product: Product, options?: SelectedOptions) {
   let finalPrice = product.price;
   if (product.sale) {

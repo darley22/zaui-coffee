@@ -7,7 +7,7 @@ import { Cart } from "types/cart";
 import { Notification } from "types/notification";
 import { calculateDistance } from "utils/location";
 import { Store } from "types/delivery";
-import { calcFinalPrice } from "utils/product";
+import { calcFinalPrice, parsePrice } from "utils/product";
 import { wait } from "utils/async";
 import { getCategories, getProducts, getProductVariations } from "./services/woocommerce";
 import categories from "../mock/categories.json";
@@ -51,61 +51,70 @@ export const productsState = selector<Product[]>({
     const wcProducts = await getProducts();
     if (wcProducts && wcProducts.length > 0) {
       const parsedProducts = await Promise.all(wcProducts.map(async (p: any) => {
-        let mappedVariants: Variant[] = [];
-        let price = Number(p.price || p.regular_price || 0);
+        try {
+          let mappedVariants: Variant[] = [];
+          let price = parsePrice(p.price || p.regular_price || 0);
 
-        if (p.type === "variable") {
-          const variations = await getProductVariations(p.id);
-          if (variations && variations.length > 0) {
-            // Map WooCommerce attributes to Zalo MultipleOptionVariant
-            const basePrice = Number(variations[0].regular_price || variations[0].price || 0);
-            price = basePrice;
+          if (p.type === "variable") {
+            try {
+              const variations = await getProductVariations(p.id);
+              if (variations && !variations.error && variations.length > 0) {
+                // Map WooCommerce attributes to Zalo MultipleOptionVariant
+                const basePrice = parsePrice(variations[0].regular_price || variations[0].price || 0);
+                price = basePrice;
 
-            const optionsMapping: Record<string, any[]> = {};
+                const optionsMapping: Record<string, any[]> = {};
 
-            variations.forEach((v: any) => {
-              v.attributes.forEach((attr: any) => {
-                if (!optionsMapping[attr.name]) optionsMapping[attr.name] = [];
+                variations.forEach((v: any) => {
+                  v.attributes?.forEach((attr: any) => {
+                    if (!optionsMapping[attr.name]) optionsMapping[attr.name] = [];
 
-                const vPrice = Number(v.price || v.regular_price || 0);
-                const priceDiff = vPrice - basePrice;
+                    const vPrice = parsePrice(v.price || v.regular_price || 0);
+                    const priceDiff = vPrice - basePrice;
 
-                const existingOption = optionsMapping[attr.name].find(o => o.id === attr.option);
-                if (!existingOption) {
-                  optionsMapping[attr.name].push({
-                    id: attr.option,
-                    label: attr.option,
-                    priceChange: priceDiff !== 0 ? { type: "fixed", amount: priceDiff } : undefined,
+                    const existingOption = optionsMapping[attr.name].find(o => o.id === attr.option);
+                    if (!existingOption) {
+                      optionsMapping[attr.name].push({
+                        id: attr.option,
+                        label: attr.option,
+                        priceChange: priceDiff !== 0 ? { type: "fixed", amount: priceDiff } : undefined,
+                      });
+                    }
                   });
-                }
-              });
-            });
+                });
 
-            mappedVariants = Object.keys(optionsMapping).map(attrName => ({
-              id: attrName,
-              label: attrName,
-              type: "single", // Generally variations are single-choice per attribute
-              options: optionsMapping[attrName],
-              default: optionsMapping[attrName][0]?.id
-            })) as Variant[];
+                mappedVariants = Object.keys(optionsMapping).map(attrName => ({
+                  id: attrName,
+                  label: attrName,
+                  type: "single", // Generally variations are single-choice per attribute
+                  options: optionsMapping[attrName],
+                  default: optionsMapping[attrName][0]?.id
+                })) as Variant[];
+              }
+            } catch (err) {
+              console.error(`Failed to load variations for product ${p.id}`, err);
+            }
           }
-        }
 
-        return {
-          id: p.id,
-          name: p.name,
-          price: price,
-          image: p.images?.[0]?.src || "https://zjs.zmdx.vn/zmp/mobile/zaui-coffee/products/placeholder.svg",
-          description: p.short_description || p.description || "",
-          categoryId: p.categories?.filter((c: any) => c.slug !== 'uncategorized').map((c: any) => String(c.id)) || [],
-          variants: mappedVariants.length > 0 ? mappedVariants : undefined,
-          sale: p.on_sale && p.regular_price && p.sale_price ? {
-            type: "percent",
-            percent: Math.round(((p.regular_price - p.sale_price) / p.regular_price) * 100)
-          } : undefined,
-        } as unknown as Product;
+          return {
+            id: p.id,
+            name: p.name,
+            price: price,
+            image: p.images?.[0]?.src || "https://zjs.zmdx.vn/zmp/mobile/zaui-coffee/products/placeholder.svg",
+            description: p.short_description || p.description || "",
+            categoryId: p.categories?.filter((c: any) => c.slug !== 'uncategorized').map((c: any) => String(c.id)) || [],
+            variants: mappedVariants.length > 0 ? mappedVariants : undefined,
+            sale: p.on_sale && p.regular_price && p.sale_price ? {
+              type: "percent",
+              percent: Math.round(((parsePrice(p.regular_price) - parsePrice(p.sale_price)) / parsePrice(p.regular_price)) * 100)
+            } : undefined,
+          } as unknown as Product;
+        } catch (err) {
+          console.error(`Failed mapping product ${p.id}`, err);
+          return null;
+        }
       }));
-      return parsedProducts;
+      return parsedProducts.filter(p => p !== null) as Product[];
     }
     // Fallback to mock data
     await wait(2000);
@@ -134,7 +143,16 @@ export const recommendProductsState = selector<Product[]>({
 
 export const selectedCategoryIdState = atom({
   key: "selectedCategoryId",
-  default: "coffee",
+  default: selector({
+    key: "selectedCategoryIdDefault",
+    get: ({ get }) => {
+      const categories = get(categoriesState);
+      if (categories && categories.length > 0) {
+        return categories[0].id;
+      }
+      return "coffee";
+    }
+  })
 });
 
 export const productsByCategoryState = selectorFamily<Product[], string>({
