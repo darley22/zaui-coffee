@@ -9,7 +9,7 @@ import { calculateDistance } from "utils/location";
 import { Store } from "types/delivery";
 import { calcFinalPrice, parsePrice } from "utils/product";
 import { wait } from "utils/async";
-import { getCategories, getProducts, getProductVariations } from "./services/woocommerce";
+import { getCategories, getProducts, getProductVariations, getSiteConfig } from "./services/woocommerce";
 import categories from "../mock/categories.json";
 
 export const userState = selector({
@@ -17,6 +17,21 @@ export const userState = selector({
   get: async () => {
     const { userInfo } = await getUserInfo({ autoRequestPermission: true });
     return userInfo;
+  },
+});
+
+export const logoState = selector<string>({
+  key: "logo",
+  get: async () => {
+    try {
+      const siteConfig = await getSiteConfig();
+      if (siteConfig && siteConfig.site_icon_url) {
+        return siteConfig.site_icon_url;
+      }
+    } catch (error) {
+      console.error("Failed to fetch site logo", error);
+    }
+    return logo;
   },
 });
 

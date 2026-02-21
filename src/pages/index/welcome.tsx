@@ -1,10 +1,14 @@
 import React, { FC } from "react";
 import { Box, Header, Text } from "zmp-ui";
-import logo from "static/logo.png";
+import logoFallback from "static/logo.png";
 import appConfig from "../../../app-config.json";
 import { getConfig } from "utils/config";
+import { useRecoilValue } from "recoil";
+import { logoState } from "state";
 
 export const Welcome: FC = () => {
+  const logo = useRecoilValue(logoState) || logoFallback;
+
   return (
     <Header
       className="app-header no-border pl-4 flex-none pb-[6px]"
@@ -14,7 +18,7 @@ export const Welcome: FC = () => {
           <Box flex alignItems="center" className="space-x-2">
             <img
               className="w-8 h-8 rounded-lg border-inset"
-              src={getConfig((c) => c.template.headerLogo) || logo}
+              src={logo}
             />
             <Box>
               <Text.Title size="small">{appConfig.app.title}</Text.Title>

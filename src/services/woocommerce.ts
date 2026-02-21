@@ -68,3 +68,17 @@ export const createOrder = async (orderData: any) => {
         body: JSON.stringify(orderData),
     });
 };
+
+/**
+ * Fetch WP Site Info
+ */
+export const getSiteConfig = async () => {
+    if (!WC_URL) return null;
+    try {
+        const response = await fetch(`${WC_URL}/wp-json/`);
+        if (!response.ok) return null;
+        return await response.json();
+    } catch (error) {
+        return null;
+    }
+};
