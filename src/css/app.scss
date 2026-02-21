@@ -116,3 +116,7 @@ body {
     }
   }
 }
+
+.zaui-bottom-navigation {
+  padding-bottom: env(safe-area-inset-bottom);
+}
