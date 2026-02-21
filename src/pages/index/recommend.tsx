@@ -32,7 +32,7 @@ export const RecommendContent: FC = () => {
                       >
                         Giảm{" "}
                         {product.sale.type === "percent" ? (
-                          `${product.sale.percent * 100}%`
+                          `${Math.round(product.sale.percent * 100)}%`
                         ) : (
                           <DisplayPrice>{product.sale.amount}</DisplayPrice>
                         )}

@@ -53,15 +53,45 @@ export const productsState = selector<Product[]>({
       const parsedProducts = await Promise.all(wcProducts.map(async (p: any) => {
         try {
           let mappedVariants: Variant[] = [];
-          let price = parsePrice(p.price || p.regular_price || 0);
+          // In WooCommerce, price is the current effective price (sale or regular).
+          // ZMP UI expects `product.price` to be the original price if a sale is present,
+          // then it applies the discount using `sale.percent` or `sale.amount`.
+          let basePrice = parsePrice(p.regular_price || p.price || 0);
+          let currentPrice = parsePrice(p.price || 0);
+
+          let sale: any = undefined;
+          if (p.on_sale && p.regular_price && p.sale_price) {
+            const rPrice = parsePrice(p.regular_price);
+            const sPrice = parsePrice(p.sale_price);
+            if (rPrice > sPrice) {
+              sale = {
+                type: "percent",
+                // Zalo Mini App expects a decimal fraction for percent calculation (e.g., 0.2 for 20%), 
+                // but the UI label (e.g. GIẢM 20%) comes from multiplying that by 100, wait, let's check.
+                // Looking at `calcFinalPrice`: `finalPrice = product.price * (1 - product.sale.percent)`
+                // So the percent must be expressed as a decimal like 0.2 for 20% discount.
+                percent: (rPrice - sPrice) / rPrice,
+              };
+            }
+          }
 
           if (p.type === "variable") {
             try {
               const variations = await getProductVariations(p.id);
               if (variations && !variations.error && variations.length > 0) {
-                // Map WooCommerce attributes to Zalo MultipleOptionVariant
-                const basePrice = parsePrice(variations[0].regular_price || variations[0].price || 0);
-                price = basePrice;
+                // Determine base price off the first variation
+                const firstVarRegPrice = parsePrice(variations[0].regular_price || variations[0].price || 0);
+                const firstVarSalePrice = parsePrice(variations[0].sale_price || 0);
+
+                basePrice = firstVarRegPrice;
+                if (variations[0].on_sale && firstVarRegPrice > firstVarSalePrice) {
+                  sale = {
+                    type: "percent",
+                    percent: (firstVarRegPrice - firstVarSalePrice) / firstVarRegPrice
+                  };
+                } else {
+                  sale = undefined; // Override if variation is not on sale
+                }
 
                 const optionsMapping: Record<string, any[]> = {};
 
@@ -69,8 +99,9 @@ export const productsState = selector<Product[]>({
                   v.attributes?.forEach((attr: any) => {
                     if (!optionsMapping[attr.name]) optionsMapping[attr.name] = [];
 
-                    const vPrice = parsePrice(v.price || v.regular_price || 0);
-                    const priceDiff = vPrice - basePrice;
+                    // The variant's effective price (reg or sale)
+                    const vRegPrice = parsePrice(v.regular_price || v.price || 0);
+                    const priceDiff = vRegPrice - basePrice;
 
                     const existingOption = optionsMapping[attr.name].find(o => o.id === attr.option);
                     if (!existingOption) {
@@ -99,15 +130,14 @@ export const productsState = selector<Product[]>({
           return {
             id: p.id,
             name: p.name,
-            price: price,
+            // The template expects `price` to equal original price, but our previous implementation
+            // fed the already-discounted price into `product.price`. That caused double deductions when `sale` was set.
+            price: basePrice,
             image: p.images?.[0]?.src || "https://zjs.zmdx.vn/zmp/mobile/zaui-coffee/products/placeholder.svg",
             description: p.short_description || p.description || "",
             categoryId: p.categories?.filter((c: any) => c.slug !== 'uncategorized').map((c: any) => String(c.id)) || [],
             variants: mappedVariants.length > 0 ? mappedVariants : undefined,
-            sale: p.on_sale && p.regular_price && p.sale_price ? {
-              type: "percent",
-              percent: Math.round(((parsePrice(p.regular_price) - parsePrice(p.sale_price)) / parsePrice(p.regular_price)) * 100)
-            } : undefined,
+            sale: sale,
           } as unknown as Product;
         } catch (err) {
           console.error(`Failed mapping product ${p.id}`, err);
