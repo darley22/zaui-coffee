@@ -2,9 +2,7 @@ export const WC_URL = import.meta.env.VITE_WC_URL;
 export const WC_CONSUMER_KEY = import.meta.env.VITE_WC_CONSUMER_KEY;
 export const WC_CONSUMER_SECRET = import.meta.env.VITE_WC_CONSUMER_SECRET;
 
-const getAuthString = () => {
-    return btoa(`${WC_CONSUMER_KEY}:${WC_CONSUMER_SECRET}`);
-};
+
 
 /**
  * Fetch generic data from WooCommerce REST API
@@ -15,10 +13,11 @@ export const fetchWcApi = async (endpoint: string, options: RequestInit = {}) =>
         return null;
     }
 
-    const url = `${WC_URL}/wp-json/wc/v3/${endpoint}`;
+    const separator = endpoint.includes('?') ? '&' : '?';
+    const url = `${WC_URL}/wp-json/wc/v3/${endpoint}${separator}consumer_key=${WC_CONSUMER_KEY}&consumer_secret=${WC_CONSUMER_SECRET}`;
+
     const headers = {
         ...options.headers,
-        Authorization: `Basic ${getAuthString()}`,
         "Content-Type": "application/json",
     };
 

@@ -85,7 +85,8 @@ export const productsState = selector<Product[]>({
               id: attrName,
               label: attrName,
               type: "single", // Generally variations are single-choice per attribute
-              options: optionsMapping[attrName]
+              options: optionsMapping[attrName],
+              default: optionsMapping[attrName][0]?.id
             })) as Variant[];
           }
         }
@@ -179,15 +180,15 @@ export const notificationsState = atom<Notification[]>({
     {
       id: 1,
       image: logo,
-      title: "Chào bạn mới",
+      title: "Chào mừng bạn đến với Hạnh Hà",
       content:
-        "Cảm ơn đã sử dụng ZaUI Coffee, bạn có thể dùng ứng dụng này để tiết kiệm thời gian xây dựng",
+        "Cảm ơn bạn đã lựa chọn dịch vụ in ấn Thiệp Cưới Hạnh Hà.",
     },
     {
       id: 2,
       image: logo,
-      title: "Giảm 50% lần đầu mua hàng",
-      content: "Nhập WELCOME để được giảm 50% giá trị đơn hàng đầu tiên order",
+      title: "Ưu đãi mùa cưới",
+      content: "Nhập mã HANHHA để được giảm ngay 10% cho đơn hàng thiệp cưới đầu tiên",
     },
   ],
 });

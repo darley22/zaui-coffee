@@ -21,6 +21,9 @@ export function calcFinalPrice(product: Product, options?: SelectedOptions) {
       const variant = product.variants.find((v) => v.id === variantKey);
       if (variant) {
         const currentOption = options[variantKey];
+        if (!currentOption) {
+          continue; // Skip if no option selected
+        }
         if (typeof currentOption === "string") {
           const selected = variant.options.find((o) => o.id === currentOption);
           if (selected) {
@@ -49,7 +52,7 @@ export function calcFinalPrice(product: Product, options?: SelectedOptions) {
 }
 
 export function getDummyImage(filename: string) {
-  return `https://stc-zmp.zadn.vn/templates/zaui-coffee/dummy/${filename}`;
+  return `https://picsum.photos/seed/${filename}/800/400`;
 }
 
 export function isIdentical(
